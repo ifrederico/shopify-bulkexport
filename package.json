@@ -1,5 +1,5 @@
 {
-  "name": "shopcsv",
+  "name": "shopify-bulkexport",
   "private": true,
   "version": "0.0.0",
   "type": "module",
