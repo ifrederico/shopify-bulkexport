@@ -1,38 +1,31 @@
 {
-  "name": "shopify-bulkexport",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "server": "node server/server.js",
-    "start": "concurrently \"npm run server\" \"npm run dev\"",
-    "build": "vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "@shopify/polaris": "^13.9.2",
-    "@shopify/polaris-icons": "^9.3.0",
-    "axios": "^1.7.9",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-router-dom": "^7.1.5"
-  },
-  "devDependencies": {
-    "@eslint/js": "^9.19.0",
-    "@types/react": "^19.0.8",
-    "@types/react-dom": "^19.0.3",
-    "@vitejs/plugin-react": "^4.3.4",
-    "concurrently": "^8.0.2",
-    "eslint": "^9.19.0",
-    "eslint-plugin-react": "^7.37.4",
-    "eslint-plugin-react-hooks": "^5.0.0",
-    "eslint-plugin-react-refresh": "^0.4.18",
-    "globals": "^15.14.0",
-    "vite": "^6.1.0"
+    "name": "shopify-bulkexport",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "scripts": {
+      "clean": "rm -rf dist",
+      "build": "vite build",
+      "dev": "concurrently \"vite\" \"nodemon server/server.js\"",
+      "start": "pm2 start ecosystem.config.cjs --env production --no-daemon",
+      "deploy": "pm2 delete all && npm run clean && npm run build && npm run start"
+    },
+    "dependencies": {
+      "@shopify/app-bridge": "^3.7.10",
+      "@shopify/app-bridge-react": "^3.7.10",
+      "@shopify/polaris": "^13.9.2",
+      "axios": "^1.7.9",
+      "concurrently": "^8.2.0",
+      "cors": "^2.8.5",
+      "dotenv": "^16.4.7",
+      "express": "^4.21.2",
+      "nodemon": "^3.0.1",
+      "pm2": "^5.2.2",
+      "react": "^18.2.0",
+      "react-dom": "^18.2.0"
+    },
+    "devDependencies": {
+      "@vitejs/plugin-react": "^4.0.0",
+      "vite": "^4.5.0"
+    }
   }
-}

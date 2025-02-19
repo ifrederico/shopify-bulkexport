@@ -1,4 +1,5 @@
 // server/server.js
+
 import express from 'express';
 import cors from 'cors';
 import axios from 'axios';
@@ -9,94 +10,133 @@ import { fileURLToPath } from 'url';
 
 dotenv.config();
 
-const app = express();
-app.use(cors({
-  origin: "*",  // Allow all domains (change in production)
-  methods: "GET,POST,PUT,DELETE",
-  allowedHeaders: "Content-Type,Authorization"
-}));
-app.use(express.json());
-
 const { SHOPIFY_API_KEY, SHOPIFY_API_SECRET, SCOPES, HOST, PORT } = process.env;
+const app = express();
 
-// Fix __dirname in ES6 modules
+app.use(express.json());
+app.use(cors());
+
+// ESM-friendly __dirname
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-/**
- * Verify the HMAC signature provided by Shopify in the OAuth callback.
- */
-function verifyHmac(query) {
-  const { hmac, signature, ...params } = query;
-  const message = Object.keys(params).sort().map(key => `${key}=${params[key]}`).join('&');
-  const generatedHmac = crypto.createHmac('sha256', SHOPIFY_API_SECRET).update(message).digest('hex');
-  
-  const providedHmacBuffer = Buffer.from(hmac, 'utf-8');
-  const generatedHmacBuffer = Buffer.from(generatedHmac, 'utf-8');
+// IMPORTANT: Only one ../ up from /server to reach /shopify-bulkexport
+const distPath = path.join(__dirname, '../dist');
 
-  if (providedHmacBuffer.length !== generatedHmacBuffer.length) {
-    return false;
-  }
+// Serve static assets from dist/
+app.use(
+  '/shopify-bulkexport/assets',
+  express.static(path.join(distPath, 'assets'))
+);
 
-  return crypto.timingSafeEqual(generatedHmacBuffer, providedHmacBuffer);
+// Return a simple "status" page if the user hits /shopify-bulkexport with no shop/host
+function getStatusPage() {
+  return `
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <title>Shopify Bulk Editor Server</title>
+    <style>
+      body { font-family: -apple-system, system-ui, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+      .container { text-align: center; margin-top: 50px; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>Shopify Bulk Editor Server</h1>
+      <p>Status: Running</p>
+      <p>Please access this app through your Shopify admin panel.</p>
+    </div>
+  </body>
+  </html>
+  `;
 }
 
-/**
- * GET /auth - Initiates the OAuth flow.
- */
-app.get('/auth', (req, res) => {
-  const shop = req.query.shop;
-  if (!shop) {
-    return res.status(400).send('Missing shop parameter. Use ?shop=your-shop.myshopify.com');
-  }
+// Basic HMAC validation
+function verifyHmac(queryParams) {
+  const { hmac, ...rest } = queryParams;
+  const sortedParams = Object.keys(rest)
+    .sort()
+    .map((key) => `${key}=${rest[key]}`)
+    .join('');
+  const calculated = crypto
+    .createHmac('sha256', SHOPIFY_API_SECRET)
+    .update(sortedParams)
+    .digest('hex');
+  return calculated === hmac;
+}
 
+// Root endpoint
+app.get('/shopify-bulkexport', (req, res) => {
+  const { shop, host } = req.query;
+  if (shop || host) {
+    // Serve the React embedded app
+    res.sendFile(path.join(distPath, 'index.html'));
+  } else {
+    // Show the simple status page
+    res.send(getStatusPage());
+  }
+});
+
+// Start OAuth
+app.get('/shopify-bulkexport/auth', (req, res) => {
+  const { shop } = req.query;
+  if (!shop) {
+    return res.status(400).send('Missing ?shop param');
+  }
   const state = crypto.randomBytes(16).toString('hex');
   const redirectUri = `${HOST}/shopify-bulkexport/auth/callback`;
-  const installUrl = `https://${shop}/admin/oauth/authorize?client_id=${SHOPIFY_API_KEY}&scope=${SCOPES}&state=${state}&redirect_uri=${redirectUri}`;
-  
+  const installUrl =
+    `https://${shop}/admin/oauth/authorize` +
+    `?client_id=${SHOPIFY_API_KEY}` +
+    `&scope=${SCOPES}` +
+    `&state=${state}` +
+    `&redirect_uri=${redirectUri}`;
+
   res.redirect(installUrl);
 });
 
-/**
- * GET /auth/callback - Handles the OAuth callback from Shopify.
- */
-app.get('/auth/callback', async (req, res) => {
+// OAuth callback
+app.get('/shopify-bulkexport/auth/callback', async (req, res) => {
   const { shop, hmac, code, state, timestamp } = req.query;
-
   if (!shop || !hmac || !code || !state || !timestamp) {
-    return res.status(400).send('Required parameters missing');
+    return res.status(400).send('Missing required params');
   }
-
   if (!verifyHmac(req.query)) {
     return res.status(400).send('HMAC validation failed');
   }
 
-  const accessTokenRequestUrl = `https://${shop}/admin/oauth/access_token`;
-  const payload = {
-    client_id: SHOPIFY_API_KEY,
-    client_secret: SHOPIFY_API_SECRET,
-    code,
-  };
-
   try {
-    const response = await axios.post(accessTokenRequestUrl, payload);
-    const accessToken = response.data.access_token;
+    // Exchange code for a permanent token
+    const tokenUrl = `https://${shop}/admin/oauth/access_token`;
+    const tokenRes = await axios.post(tokenUrl, {
+      client_id: SHOPIFY_API_KEY,
+      client_secret: SHOPIFY_API_SECRET,
+      code,
+    });
+    console.log(`Access token for ${shop}:`, tokenRes.data.access_token);
 
-    console.log(`Access Token for ${shop}:`, accessToken);
-    res.redirect(`${HOST}/?shop=${shop}`);
+    // Redirect back so the user sees your embedded app
+    res.redirect(`${HOST}/shopify-bulkexport?shop=${shop}`);
   } catch (error) {
-    console.error('Error obtaining access token:', error.response ? error.response.data : error.message);
+    console.error('Error obtaining access token:', error.message);
     res.status(500).send('Error obtaining access token');
   }
 });
 
-// ✅ Serve the React frontend from the /dist folder
-app.use("/shopify-bulkexport", express.static(path.join(__dirname, "../dist")));
-
-app.get("/shopify-bulkexport/*", (req, res) => {
-  res.sendFile(path.join(__dirname, "../dist", "index.html"));
+// Catch-all for deeper routes
+app.get('/shopify-bulkexport/*', (req, res) => {
+  const { shop, host } = req.query;
+  if (shop || host) {
+    // Serve the built React app
+    res.sendFile(path.join(distPath, 'index.html'));
+  } else {
+    // If no shop param, show the status page
+    res.redirect('/shopify-bulkexport');
+  }
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`OAuth server listening on http://0.0.0.0:${PORT}`);
+// Start server
+app.listen(PORT || 3000, () => {
+  console.log(`Express server running on port ${PORT || 3000}`);
 });
