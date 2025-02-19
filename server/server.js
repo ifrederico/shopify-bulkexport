@@ -66,7 +66,7 @@ app.get('/auth', (req, res) => {
   // Generate a random state string for CSRF protection.
   // In production, store this state in a session or database to verify later.
   const state = crypto.randomBytes(16).toString('hex');
-  const redirectUri = `${HOST}/auth/callback`;
+  const redirectUri = `${HOST}/shopify-bulkexport/auth/callback`;
   
   // Build the Shopify install URL.
   const installUrl = `https://${shop}/admin/oauth/authorize?client_id=${SHOPIFY_API_KEY}&scope=${SCOPES}&state=${state}&redirect_uri=${redirectUri}`;
