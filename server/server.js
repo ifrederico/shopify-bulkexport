@@ -122,6 +122,10 @@ app.get('/auth/callback', async (req, res) => {
   }
 });
 
+app.get("/shopify-bulkexport", (req, res) => {
+  res.send("Shopify Bulk Export App is Running!");
+});
+
 // Route to serve the main page at /shopify-bulkexport/
 app.listen(PORT, () => {
   console.log(`OAuth server listening on port ${PORT}`);
